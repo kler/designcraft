@@ -57,7 +57,7 @@ craft-fonts. The language totals above retain their dated measurement; this is a
 | Ukrainian | uk | 1,432 (83%), plural categories handled | partial |
 | Polish | pl | 1,717 (99%), count captions category-first; AI-drafted, awaiting native review | partial |
 | Georgian | ka | 1,724 (~100%: every catalog key plus the command labels the others lack), count captions as `noun: n` | partial (reviewed by a native speaker) |
-| Swedish | sv | ~1,880 catalog entries, every menu title, item and submenu | partial |
+| Swedish | sv | 2,326 catalog entries (100%), every menu title, item and submenu; singular for a count of one | partial |
 
 DesignCraft ships **6** interface languages beyond the twelve; InDesign ships 17 beyond its
 eight of the twelve (cs, da, el, en_GB, fi, hu, it, nb, nl, pl, ro, ru, sq, sv, tr, uk, zh_TW).

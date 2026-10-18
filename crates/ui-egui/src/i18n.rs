@@ -4551,11 +4551,28 @@ pub fn category_first(lang: &str) -> bool {
     matches!(lang, "uk" | "ru" | "pl" | "ka")
 }
 
+/// Swedish singular for a count of one, where it differs from the catalog's plural ("1 sida",
+/// "5 sidor"); "fel", "objekt" and "lager" read the same either way.
+fn swedish_singular(noun: &str) -> Option<&'static str> {
+    match noun {
+        "pages" => Some("sida"),
+        "stories" => Some("artikel"),
+        "warnings" => Some("varning"),
+        _ => None,
+    }
+}
+
 /// Caption for a counted category, e.g. `count_label("ru", "pages", 5)` is "страниц: 5". Czech
-/// picks the plural form for the count (1, 2–4, other).
+/// picks the plural form for the count (1, 2–4, other); Swedish the singular for one.
 pub fn count_label(lang: &str, noun: &str, count: usize) -> String {
     if category_first(lang) {
         return format!("{}: {count}", tr(lang, noun));
+    }
+    if lang == "sv"
+        && count == 1
+        && let Some(one) = swedish_singular(noun)
+    {
+        return format!("{count} {one}");
     }
     if lang == "cs"
         && let Some((_, [one, few, other])) = cs::PLURALS.iter().find(|(key, _)| *key == noun)
@@ -4835,6 +4852,9 @@ mod tests {
         assert_eq!(tr("sv", "Unknown label"), "Unknown label");
         assert!(!is_rtl("sv"));
         assert_eq!(count_label("sv", "pages", 5), "5 sidor");
+        assert_eq!(count_label("sv", "pages", 1), "1 sida");
+        assert_eq!(count_label("sv", "warnings", 1), "1 varning");
+        assert_eq!(count_label("sv", "errors", 1), "1 fel");
     }
 
     #[test]
