@@ -4647,8 +4647,15 @@ mod tests {
     ];
 
     /// Every per-language table `tr_context` looks up.
-    const CONTEXT_TABLES: &[(&str, &[(&str, &str, &str)])] =
-        &[("ar", ar::CONTEXT), ("cs", cs::CONTEXT), ("ja", ja::CONTEXT), ("pl", pl::CONTEXT), ("ru", ru::CONTEXT), ("uk", uk::CONTEXT), ("sv", sv::CONTEXT)];
+    const CONTEXT_TABLES: &[(&str, &[(&str, &str, &str)])] = &[
+        ("ar", ar::CONTEXT),
+        ("cs", cs::CONTEXT),
+        ("ja", ja::CONTEXT),
+        ("pl", pl::CONTEXT),
+        ("ru", ru::CONTEXT),
+        ("uk", uk::CONTEXT),
+        ("sv", sv::CONTEXT),
+    ];
 
     /// The languages of the shared tables' columns, in column order.
     const SHARED_COLUMNS: [&str; 5] = ["de", "fr", "es", "ja", "zh"];
@@ -4966,6 +4973,25 @@ mod tests {
             "Story Editor — {count} words",
             "Text Anchor",
             "Use Document Style Definition",
+            // Control panel icons, the Create Guides and Margins and Columns dialogs, and Table of Contents.
+            "Corner Size",
+            "Stroke Weight",
+            "Remove Existing Ruler Guides",
+            "This page",
+            "This page is",
+            "Both pages of the spread",
+            "Both pages of the parent spread",
+            "All pages",
+            "Title:",
+            "Styles in Table of Contents",
+            "Include Paragraph Styles:",
+            "Other Styles:",
+            "« Add",
+            "Remove »",
+            "Entry Style:",
+            "Page Number:",
+            "Between Entry and Number:",
+            "Replace Existing Table of Contents",
             // Status-bar messages.
             "Alternate layout",
             "Couldn't write recovery data: {error}",
