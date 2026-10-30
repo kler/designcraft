@@ -20,6 +20,7 @@ pub mod cjk_settings;
 pub mod datamerge;
 mod edit;
 pub mod endnotes;
+pub mod file_info;
 pub mod flex;
 pub mod ids;
 pub mod index;
@@ -53,6 +54,7 @@ pub use designcraft_color as color;
 pub use designcraft_geom as geom;
 pub use edit::{ItemLoc, ItemPath, SpreadRef, hit_descendant, item_hit as edit_hit};
 pub use endnotes::{ENDNOTE_REF, EditorialNote, EndnoteOptions, NOTE_MARK};
+pub use file_info::FileInfo;
 pub use flex::{FlexAlign, FlexDirection, FlexJustify, FlexLayout, FlexSize};
 pub use ids::*;
 pub use index::{INDEX_MARK, IndexRef};
@@ -237,7 +239,8 @@ impl Document {
     }
 }
 
-/// Ink Manager settings for output.
+/// Ink Manager settings for output, by swatch name. Output applies them through a
+/// `craft_prepress::InkSet` built from the document (`designcraft_pdf::inks`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct InkManager {
@@ -252,19 +255,6 @@ pub struct InkManager {
 impl InkManager {
     fn is_default(&self) -> bool {
         *self == Self::default()
-    }
-
-    /// The ink a spot swatch prints on (after aliases; at most a few hops) and whether it's
-    /// converted to process.
-    pub fn resolve<'a>(&'a self, ink: &'a str) -> (&'a str, bool) {
-        let mut n = ink;
-        for _ in 0..8 {
-            match self.aliases.iter().find(|(a, _)| a == n) {
-                Some((_, to)) if to != n => n = to,
-                _ => break,
-            }
-        }
-        (n, self.all_to_process || self.to_process.iter().any(|x| x == n))
     }
 }
 
@@ -664,6 +654,9 @@ fn is_zero(v: &u32) -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct Document {
     pub title: String,
+    /// File › File Info.
+    #[serde(default, skip_serializing_if = "FileInfo::is_empty")]
+    pub file_info: FileInfo,
     pub settings: DocSettings,
     pub spreads: Vec<Arc<Spread>>,
     pub parents: Vec<Arc<Spread>>,
@@ -960,6 +953,91 @@ impl Document {
 
     pub fn resolve_color(&self, swatch: &str, tint: f32) -> Option<designcraft_color::Color> {
         designcraft_color::swatch::resolve(&self.swatches, swatch, tint)
+    }
+
+    /// Give items that reuse an earlier item's id (spreads, then parents, then items anchored in
+    /// stories) fresh ids, so a file holding such duplicates opens. The first item keeps the id and
+    /// what refers to it by id; a renumbered text frame takes its place in its story's thread.
+    pub fn renumber_duplicate_items(&mut self) {
+        fn walk_mut(it: &mut Item, f: &mut impl FnMut(&mut Item)) {
+            f(it);
+            for c in it.children_mut().into_iter().flatten() {
+                walk_mut(Arc::make_mut(c), f);
+            }
+        }
+        fn story_items(st: &mut Story, f: &mut impl FnMut(&mut Item)) {
+            for o in &mut st.objects {
+                walk_mut(&mut Arc::make_mut(o).item, f);
+            }
+            for t in st.tables.values_mut() {
+                for c in &mut Arc::make_mut(t).cells {
+                    story_items(&mut c.text, f);
+                }
+            }
+            for n in st.notes.iter_mut().chain(st.endnotes.iter_mut()) {
+                story_items(&mut Arc::make_mut(n).text, f);
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut dups = std::collections::HashSet::new();
+        let mut next = self.next_id;
+        let mut note = |id: ItemId| {
+            next = next.max(id.0);
+            if !seen.insert(id) {
+                dups.insert(id);
+            }
+        };
+        for sp in self.spreads.iter().chain(self.parents.iter()) {
+            for it in &sp.items {
+                it.walk(&mut |i| note(i.id));
+            }
+        }
+        for (_, i) in self.anchored_items() {
+            note(i.id);
+        }
+        if dups.is_empty() {
+            return;
+        }
+        let mut seen = std::collections::HashSet::new();
+        // (story, id in the file) → the ids its frames carry now, in walk order.
+        let mut threads: std::collections::HashMap<(StoryId, ItemId), Vec<ItemId>> = std::collections::HashMap::new();
+        let mut fix = |it: &mut Item| {
+            let old = it.id;
+            if !dups.contains(&old) {
+                return;
+            }
+            if !seen.insert(old) {
+                // An id at the top of the range has no successor: leave the duplicate for
+                // `check()` to refuse rather than overflow.
+                let Some(n) = next.checked_add(1) else { return };
+                next = n;
+                it.id = ItemId(next);
+            }
+            if let Some(t) = it.text_frame() {
+                threads.entry((t.story, old)).or_default().push(it.id);
+            }
+        };
+        for sp in self.spreads.iter_mut().chain(self.parents.iter_mut()) {
+            for it in &mut Arc::make_mut(sp).items {
+                walk_mut(Arc::make_mut(it), &mut fix);
+            }
+        }
+        for st in self.stories.values_mut() {
+            story_items(Arc::make_mut(st), &mut fix);
+        }
+        self.next_id = next;
+        for ((sid, old), ids) in threads {
+            let Some(st) = self.stories.get_mut(&sid) else { continue };
+            let st = Arc::make_mut(st);
+            let mut ids = ids.into_iter();
+            for f in st.frames.iter_mut().filter(|f| **f == old) {
+                match ids.next() {
+                    Some(id) => *f = id,
+                    None => break,
+                }
+            }
+            st.frames.extend(ids);
+        }
     }
 
     /// Validate structural invariants (ids unique, threads consistent, stories well-formed).
